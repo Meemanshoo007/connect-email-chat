@@ -1,6 +1,7 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 // Define user type
 export interface User {
@@ -25,14 +26,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Mock users for demo purposes (in a real app, this would be stored in a database)
-const MOCK_USERS: User[] = [
-  { id: "1", email: "user1@example.com" },
-  { id: "2", email: "user2@example.com" },
-  { id: "3", email: "user3@example.com" },
-  { id: "4", email: "test@example.com" }
-];
-
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -40,51 +33,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Check if user is already logged in
   useEffect(() => {
-    const storedUser = localStorage.getItem("chat_user");
-    if (storedUser) {
+    const checkUser = async () => {
       try {
-        setCurrentUser(JSON.parse(storedUser));
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          const { id, email } = session.user;
+          setCurrentUser({ id, email: email || "" });
+        }
       } catch (error) {
-        console.error("Failed to parse stored user data:", error);
-        localStorage.removeItem("chat_user");
+        console.error("Error checking authentication:", error);
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+
+    checkUser();
+
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session?.user) {
+          const { id, email } = session.user;
+          setCurrentUser({ id, email: email || "" });
+        } else {
+          setCurrentUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
     
     try {
-      // Simulate API request delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // Check if user exists in our mock database
-      const user = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (error) {
+        throw error;
+      }
       
-      if (user) {
-        // In a real app, we'd verify the password here
-        setCurrentUser(user);
-        localStorage.setItem("chat_user", JSON.stringify(user));
+      if (data?.user) {
         toast({
           title: "Success",
           description: "You've successfully logged in",
         });
-      } else {
-        // Create new user if not found (for demo purposes)
-        const newUser: User = { id: (MOCK_USERS.length + 1).toString(), email };
-        MOCK_USERS.push(newUser);
-        setCurrentUser(newUser);
-        localStorage.setItem("chat_user", JSON.stringify(newUser));
-        toast({
-          title: "Success",
-          description: "Logged in as a new user",
-        });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to login. Please try again.",
+        description: error.message || "Failed to login. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -96,47 +102,75 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      // Simulate API request delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // First check if email already exists by attempting a password reset
+      // This is a workaround since we can't directly query auth.users
+      const { data: checkData, error: checkError } = await supabase.auth.resetPasswordForEmail(
+        email,
+        { redirectTo: window.location.origin }
+      );
       
-      // Check if user already exists
-      const existingUser = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+      // If no error occurred during the check, the email exists
+      if (!checkError) {
+        toast({
+          title: "Error",
+          description: "Email is already registered. Please login instead.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
       
-      if (existingUser) {
+      // If we get here, the email doesn't exist, so we can register
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data.user) {
+        toast({
+          title: "Success",
+          description: "Account created successfully! Please check your email for verification.",
+        });
+      }
+    } catch (error: any) {
+      // Handle specific error for existing email
+      if (error.message?.toLowerCase().includes("email already")) {
         toast({
           title: "Error",
           description: "Email is already registered. Please login instead.",
           variant: "destructive",
         });
       } else {
-        // Create new user
-        const newUser: User = { id: (MOCK_USERS.length + 1).toString(), email };
-        MOCK_USERS.push(newUser);
-        setCurrentUser(newUser);
-        localStorage.setItem("chat_user", JSON.stringify(newUser));
         toast({
-          title: "Success",
-          description: "Account created successfully!",
+          title: "Error",
+          description: error.message || "Failed to create account. Please try again.",
+          variant: "destructive",
         });
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create account. Please try again.",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem("chat_user");
-    toast({
-      title: "Logged out",
-      description: "You've been successfully logged out",
-    });
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      toast({
+        title: "Logged out",
+        description: "You've been successfully logged out",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const value: AuthContextType = {
@@ -160,4 +194,4 @@ export const useAuth = () => {
 };
 
 // Export mock users for the demo
-export const getMockUsers = () => MOCK_USERS.filter(user => user.id !== "0");
+export const getMockUsers = () => [];
