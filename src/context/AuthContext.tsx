@@ -102,32 +102,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      // First check if email already exists by attempting a password reset
-      // This is a workaround since we can't directly query auth.users
-      const { data: checkData, error: checkError } = await supabase.auth.resetPasswordForEmail(
-        email,
-        { redirectTo: window.location.origin }
-      );
-      
-      // If no error occurred during the check, the email exists
-      if (!checkError) {
-        toast({
-          title: "Error",
-          description: "Email is already registered. Please login instead.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-      
-      // If we get here, the email doesn't exist, so we can register
+      // First check if the email exists by trying to sign up
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
       
+      // If there's an error during sign up
       if (error) {
-        throw error;
+        // If the error message includes something about email being registered
+        if (error.message?.toLowerCase().includes("email already")) {
+          toast({
+            title: "Error",
+            description: "Email is already registered. Please login instead.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: error.message || "Failed to create account. Please try again.",
+            variant: "destructive",
+          });
+        }
+        return;
       }
       
       if (data.user) {
@@ -137,20 +134,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
       }
     } catch (error: any) {
-      // Handle specific error for existing email
-      if (error.message?.toLowerCase().includes("email already")) {
-        toast({
-          title: "Error",
-          description: "Email is already registered. Please login instead.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to create account. Please try again.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
