@@ -31,63 +31,76 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const { toast } = useToast();
 
-  // Check if user is already logged in
+  // Check if user is already logged in (from session storage)
   useEffect(() => {
-    const checkUser = async () => {
+    const storedUser = sessionStorage.getItem('currentUser');
+    if (storedUser) {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          const { id, email } = session.user;
-          setCurrentUser({ id, email: email || "" });
-        }
+        const user = JSON.parse(storedUser);
+        setCurrentUser(user);
       } catch (error) {
-        console.error("Error checking authentication:", error);
-      } finally {
-        setLoading(false);
+        console.error("Error parsing stored user:", error);
+        sessionStorage.removeItem('currentUser');
       }
-    };
-
-    checkUser();
-
-    // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (session?.user) {
-          const { id, email } = session.user;
-          setCurrentUser({ id, email: email || "" });
-        } else {
-          setCurrentUser(null);
-        }
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    }
+    setLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      // Check if a user with this email exists
+      const { data: users, error: fetchError } = await supabase
+        .from('custom_users')
+        .select('*')
+        .eq('email', email)
+        .limit(1);
       
-      if (error) {
-        throw error;
+      if (fetchError) {
+        throw fetchError;
       }
       
-      if (data?.user) {
+      if (!users || users.length === 0) {
         toast({
-          title: "Success",
-          description: "You've successfully logged in",
+          title: "Error",
+          description: "No account found with this email. Please register first.",
+          variant: "destructive",
         });
+        setLoading(false);
+        return;
       }
+      
+      const user = users[0];
+      
+      // Check if password matches (simple comparison for now)
+      // In a real app, you would use bcrypt or another secure method
+      if (user.password !== password) {
+        toast({
+          title: "Error",
+          description: "Incorrect password. Please try again.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Set the current user
+      const currentUser = {
+        id: user.id,
+        email: user.email
+      };
+      
+      // Store user in session storage
+      sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+      setCurrentUser(currentUser);
+      
+      toast({
+        title: "Success",
+        description: "You've successfully logged in",
+      });
     } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to login. Please try again.",
@@ -102,43 +115,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      // Try to sign up the user
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin
-        }
-      });
+      // Check if email is already registered
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('custom_users')
+        .select('email')
+        .eq('email', email)
+        .limit(1);
       
-      if (error) {
-        console.log("Registration error:", error); // Debug log
-        
-        // Handle specific case when email is already in use
-        if (error.message?.includes("already registered")) {
-          toast({
-            title: "Error",
-            description: "Email is already registered. Please login instead.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Error",
-            description: error.message || "Failed to create account. Please try again.",
-            variant: "destructive",
-          });
-        }
+      if (checkError) {
+        throw checkError;
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        toast({
+          title: "Error",
+          description: "Email is already registered. Please login instead.",
+          variant: "destructive",
+        });
+        setLoading(false);
         return;
       }
       
-      if (data.user) {
-        toast({
-          title: "Success",
-          description: "Account created successfully! Please check your email for verification.",
-        });
+      // Register the new user
+      const { data: newUser, error: insertError } = await supabase
+        .from('custom_users')
+        .insert([{ email, password }])
+        .select()
+        .single();
+      
+      if (insertError) {
+        throw insertError;
       }
+      
+      toast({
+        title: "Success",
+        description: "Account created successfully! You can now login.",
+      });
     } catch (error: any) {
-      console.error("Unexpected error during registration:", error);
+      console.error("Registration error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create account. Please try again.",
@@ -149,21 +163,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-      setCurrentUser(null);
-      toast({
-        title: "Logged out",
-        description: "You've been successfully logged out",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to logout. Please try again.",
-        variant: "destructive",
-      });
-    }
+  const logout = () => {
+    // Remove user from session storage
+    sessionStorage.removeItem('currentUser');
+    setCurrentUser(null);
+    toast({
+      title: "Logged out",
+      description: "You've been successfully logged out",
+    });
   };
 
   const value: AuthContextType = {
