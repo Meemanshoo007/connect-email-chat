@@ -102,16 +102,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      // First check if the email exists by trying to sign up
+      // Try to sign up the user
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
       });
       
-      // If there's an error during sign up
       if (error) {
-        // If the error message includes something about email being registered
-        if (error.message?.toLowerCase().includes("email already")) {
+        console.log("Registration error:", error); // Debug log
+        
+        // Handle specific case when email is already in use
+        if (error.message?.includes("already registered")) {
           toast({
             title: "Error",
             description: "Email is already registered. Please login instead.",
@@ -134,6 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
       }
     } catch (error: any) {
+      console.error("Unexpected error during registration:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create account. Please try again.",
