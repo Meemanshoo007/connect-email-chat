@@ -3,16 +3,16 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut } from "lucide-react";
-import { useAuth, User } from "@/context/AuthContext";
-import UserSearch from "./UserSearch";
+import { useAuth } from "@/context/AuthContext";
+import UserSearch, { UserType } from "./UserSearch";
 import ChatContainer from "./ChatContainer";
 
 const ChatInterface: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  const handleSelectUser = (user: User) => {
+  const handleSelectUser = (user: UserType) => {
     setSelectedUser(user);
     // On mobile, hide sidebar when user is selected
     if (window.innerWidth < 768) {

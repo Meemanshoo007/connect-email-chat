@@ -193,5 +193,5 @@ export const useAuth = () => {
   return context;
 };
 
-// Export mock users for the demo
+// Export mock users for the demo - Remove this as we're using real database now
 export const getMockUsers = () => [];
