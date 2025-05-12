@@ -22,6 +22,7 @@ const UserSearch: React.FC<UserSearchProps> = ({ currentUserId, onSelectUser }) 
   const [users, setUsers] = useState<UserType[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserType[]>([]);
   const [recentlyChattedUsers, setRecentlyChattedUsers] = useState<UserType[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // Fetch all users except current user
@@ -32,6 +33,7 @@ const UserSearch: React.FC<UserSearchProps> = ({ currentUserId, onSelectUser }) 
 
   const fetchUsers = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('custom_users')
         .select('id, email')
@@ -43,34 +45,57 @@ const UserSearch: React.FC<UserSearchProps> = ({ currentUserId, onSelectUser }) 
       setFilteredUsers(data || []);
     } catch (error) {
       console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchRecentlyChattedUsers = async () => {
-    // Here we would fetch users that the current user has chatted with
-    // For this example, we'll simulate this with a dummy list
-    // In a real application, you would query a messages or chats table
-    
-    // Placeholder for recently chatted users - this should be replaced with actual database query
     try {
-      // This is a placeholder - in a real implementation, you would query your messages/chats table
-      // to find users the current user has chatted with
-      const { data, error } = await supabase
+      setLoading(true);
+      // Get unique user IDs that the current user has recently chatted with
+      const { data: sentMessages, error: sentError } = await supabase
+        .from('chat_messages')
+        .select('recipient_id, timestamp')
+        .eq('sender_id', currentUserId)
+        .order('timestamp', { ascending: false });
+      
+      const { data: receivedMessages, error: receivedError } = await supabase
+        .from('chat_messages')
+        .select('sender_id, timestamp')
+        .eq('recipient_id', currentUserId)
+        .order('timestamp', { ascending: false });
+      
+      if (sentError || receivedError) throw sentError || receivedError;
+      
+      // Combine unique user IDs from sent and received messages
+      const uniqueUserIds = new Set<string>();
+      
+      sentMessages?.forEach(msg => uniqueUserIds.add(msg.recipient_id));
+      receivedMessages?.forEach(msg => uniqueUserIds.add(msg.sender_id));
+      
+      if (uniqueUserIds.size === 0) return;
+      
+      // Fetch user details for each unique user ID
+      const { data: recentUsers, error: usersError } = await supabase
         .from('custom_users')
         .select('id, email')
-        .neq('id', currentUserId)
-        .limit(3); // Just as an example to show some users
+        .in('id', Array.from(uniqueUserIds))
+        .order('email');
       
-      if (error) throw error;
+      if (usersError) throw usersError;
       
-      const recentUsers = data?.map(user => ({
+      // Mark these users as recent chat contacts
+      const recentContacts = recentUsers?.map(user => ({
         ...user,
         recentChat: true
       })) || [];
       
-      setRecentlyChattedUsers(recentUsers);
+      setRecentlyChattedUsers(recentContacts);
     } catch (error) {
       console.error("Error fetching recent chats:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,7 +152,11 @@ const UserSearch: React.FC<UserSearchProps> = ({ currentUserId, onSelectUser }) 
       )}
       
       <div className="space-y-2 max-h-72 overflow-y-auto">
-        {displayUsers().length > 0 ? (
+        {loading ? (
+          <div className="flex justify-center items-center py-4">
+            <div className="animate-spin h-5 w-5 border-2 border-brand-500 rounded-full border-t-transparent"></div>
+          </div>
+        ) : displayUsers().length > 0 ? (
           displayUsers().map(user => (
             <Button
               key={user.id}

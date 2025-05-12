@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils";
 
 export interface Message {
   id: string;
-  senderId: string;
-  recipientId: string;
+  sender_id: string;
+  recipient_id: string;
   content: string;
-  timestamp: number;
+  timestamp: number | string;
+  read?: boolean;
 }
 
 interface ChatMessageProps {
@@ -22,10 +23,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, sende
     ? senderEmail.substring(0, 2).toUpperCase() 
     : "U";
   
-  const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  // Format timestamp as readable time
+  const formatTime = (timestamp: number | string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   return (
     <div 
@@ -59,7 +64,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, sende
             isCurrentUser ? "text-right" : "text-left"
           )}
         >
-          {formattedTime}
+          {formatTime(message.timestamp)}
         </div>
       </div>
     </div>

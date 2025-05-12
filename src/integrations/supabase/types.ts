@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          content: string
+          id: string
+          read: boolean
+          recipient_id: string
+          sender_id: string
+          timestamp: string
+        }
+        Insert: {
+          content: string
+          id?: string
+          read?: boolean
+          recipient_id: string
+          sender_id: string
+          timestamp?: string
+        }
+        Update: {
+          content?: string
+          id?: string
+          read?: boolean
+          recipient_id?: string
+          sender_id?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "custom_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "custom_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_users: {
         Row: {
           created_at: string
