@@ -67,15 +67,21 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
         table: 'chat_messages'
       }, (payload) => {
         const newMessage = payload.new as Message;
+        console.log("Real-time message received:", newMessage);
+        
         // Only add message if it's between the current conversation
         if ((newMessage.sender_id === currentUser.id && newMessage.recipient_id === selectedUser.id) ||
             (newMessage.sender_id === selectedUser.id && newMessage.recipient_id === currentUser.id)) {
+          console.log("Adding message to chat:", newMessage);
           setMessages(prevMessages => [...prevMessages, newMessage]);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Subscription status:", status);
+      });
 
     return () => {
+      console.log("Cleaning up subscription");
       supabase.removeChannel(channel);
     };
   }, [currentUser.id, selectedUser.id, toast]);
@@ -95,6 +101,8 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
         recipient_id: selectedUser.id,
         content: newMessage.trim(),
       };
+
+      console.log("Sending message:", newMsg);
 
       const { error } = await supabase
         .from('chat_messages')

@@ -35,7 +35,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, sende
   return (
     <div 
       className={cn(
-        "flex items-start gap-2 mb-4 animate-slide-up",
+        "flex items-start gap-2 mb-4 animate-in fade-in slide-in-from-bottom-5 duration-300",
         isCurrentUser ? "flex-row-reverse" : ""
       )}
     >
