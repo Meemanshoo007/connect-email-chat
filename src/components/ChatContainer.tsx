@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,10 +47,11 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
         // Add status "sent" to all existing messages from the current user
         const messagesWithStatus = filteredMessages.map(msg => ({
           ...msg,
-          status: msg.sender_id === currentUser.id ? "sent" : undefined
+          // Fix: explicitly type the status as one of the allowed string literals
+          status: msg.sender_id === currentUser.id ? ("sent" as const) : undefined
         }));
         
-        setMessages(messagesWithStatus);
+        setMessages(messagesWithStatus as Message[]);
       } catch (error: any) {
         console.error("Error fetching messages:", error.message);
         toast({
@@ -86,7 +88,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
               // Update the existing message with server data and mark as sent
               return prevMessages.map(m => 
                 m.id === newMessage.id 
-                  ? { ...newMessage, status: "sent" } 
+                  ? { ...newMessage, status: "sent" as const } 
                   : m
               );
             }
