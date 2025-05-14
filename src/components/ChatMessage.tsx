@@ -2,6 +2,7 @@
 import React from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { RefreshCcw } from "lucide-react";
 
 export interface Message {
   id: string;
@@ -10,15 +11,22 @@ export interface Message {
   content: string;
   timestamp: number | string;
   read?: boolean;
+  status?: "sending" | "sent" | "failed";
 }
 
 interface ChatMessageProps {
   message: Message;
   isCurrentUser: boolean;
   senderEmail?: string;
+  onResend?: () => void;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, senderEmail }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ 
+  message, 
+  isCurrentUser, 
+  senderEmail,
+  onResend 
+}) => {
   const initials = senderEmail 
     ? senderEmail.substring(0, 2).toUpperCase() 
     : "U";
@@ -30,6 +38,31 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, sende
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Status indicator for the message
+  const renderStatus = () => {
+    if (!isCurrentUser) return null;
+
+    switch (message.status) {
+      case "sending":
+        return <span className="text-xs text-gray-400">Sending...</span>;
+      case "failed":
+        return (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-red-500">Failed</span>
+            <button 
+              onClick={onResend} 
+              className="p-1 rounded-full hover:bg-gray-100"
+              title="Resend message"
+            >
+              <RefreshCcw className="h-3 w-3 text-red-500" />
+            </button>
+          </div>
+        );
+      default:
+        return <span className="text-xs text-gray-400">Sent</span>;
+    }
   };
 
   return (
@@ -60,11 +93,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCurrentUser, sende
         </div>
         <div 
           className={cn(
-            "text-xs mt-1 text-gray-500",
-            isCurrentUser ? "text-right" : "text-left"
+            "flex items-center mt-1",
+            isCurrentUser ? "justify-end" : "justify-start"
           )}
         >
-          {formatTime(message.timestamp)}
+          <span className="text-xs text-gray-500 mr-2">
+            {formatTime(message.timestamp)}
+          </span>
+          {renderStatus()}
         </div>
       </div>
     </div>

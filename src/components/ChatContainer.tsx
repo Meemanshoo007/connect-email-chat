@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +6,7 @@ import ChatMessage, { Message } from "./ChatMessage";
 import { User } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { v4 as uuidv4 } from "@/lib/utils";
 
 interface ChatContainerProps {
   currentUser: User;
@@ -43,7 +43,13 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
           (msg.sender_id === selectedUser.id && msg.recipient_id === currentUser.id)
         ) || [];
         
-        setMessages(filteredMessages);
+        // Add status "sent" to all existing messages from the current user
+        const messagesWithStatus = filteredMessages.map(msg => ({
+          ...msg,
+          status: msg.sender_id === currentUser.id ? "sent" : undefined
+        }));
+        
+        setMessages(messagesWithStatus);
       } catch (error: any) {
         console.error("Error fetching messages:", error.message);
         toast({
@@ -73,7 +79,21 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
         if ((newMessage.sender_id === currentUser.id && newMessage.recipient_id === selectedUser.id) ||
             (newMessage.sender_id === selectedUser.id && newMessage.recipient_id === currentUser.id)) {
           console.log("Adding message to chat:", newMessage);
-          setMessages(prevMessages => [...prevMessages, newMessage]);
+          setMessages(prevMessages => {
+            // Check if this message already exists (might be an optimistic update)
+            const existingMessage = prevMessages.find(m => m.id === newMessage.id);
+            if (existingMessage) {
+              // Update the existing message with server data and mark as sent
+              return prevMessages.map(m => 
+                m.id === newMessage.id 
+                  ? { ...newMessage, status: "sent" } 
+                  : m
+              );
+            }
+            
+            // Otherwise add as a new message
+            return [...prevMessages, newMessage];
+          });
         }
       })
       .subscribe((status) => {
@@ -95,26 +115,106 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    try {
-      const newMsg = {
-        sender_id: currentUser.id,
-        recipient_id: selectedUser.id,
-        content: newMessage.trim(),
-      };
+    // Create a temporary message ID for optimistic updates
+    const tempId = uuidv4();
+    
+    // Create the message object
+    const newMsg = {
+      id: tempId,
+      sender_id: currentUser.id,
+      recipient_id: selectedUser.id,
+      content: newMessage.trim(),
+      timestamp: new Date().toISOString(),
+      status: "sending" as const
+    };
 
+    // Add message to local state immediately (optimistic update)
+    setMessages(prevMessages => [...prevMessages, newMsg]);
+    
+    // Clear input field
+    setNewMessage("");
+
+    try {
       console.log("Sending message:", newMsg);
 
+      // Send to server, excluding the temporary id and status
       const { error } = await supabase
         .from('chat_messages')
-        .insert([newMsg]);
+        .insert([{
+          sender_id: newMsg.sender_id,
+          recipient_id: newMsg.recipient_id,
+          content: newMsg.content,
+        }]);
 
       if (error) throw error;
-      setNewMessage("");
+      
+      // Message sent successfully
+      // The real-time subscription will update the message with the real ID
     } catch (error: any) {
       console.error("Error sending message:", error.message);
+      
+      // Mark the message as failed
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === tempId 
+            ? { ...msg, status: "failed" as const } 
+            : msg
+        )
+      );
+      
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: "Failed to send message. You can try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResend = async (failedMessage: Message) => {
+    // Remove the failed message
+    setMessages(prevMessages => 
+      prevMessages.filter(msg => msg.id !== failedMessage.id)
+    );
+    
+    // Create a new message with the same content
+    const newMsg = {
+      id: uuidv4(),
+      sender_id: currentUser.id,
+      recipient_id: selectedUser.id,
+      content: failedMessage.content,
+      timestamp: new Date().toISOString(),
+      status: "sending" as const
+    };
+    
+    // Add new message to local state
+    setMessages(prevMessages => [...prevMessages, newMsg]);
+    
+    try {
+      // Send to server
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert([{
+          sender_id: newMsg.sender_id,
+          recipient_id: newMsg.recipient_id,
+          content: newMsg.content,
+        }]);
+
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Error resending message:", error.message);
+      
+      // Mark the message as failed
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === newMsg.id 
+            ? { ...msg, status: "failed" as const } 
+            : msg
+        )
+      );
+      
+      toast({
+        title: "Error",
+        description: "Failed to resend message. You can try again.",
         variant: "destructive",
       });
     }
@@ -156,6 +256,11 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ currentUser, selectedUser
                 message.sender_id === currentUser.id 
                   ? currentUser.email 
                   : selectedUser.email
+              }
+              onResend={
+                message.status === "failed" 
+                  ? () => handleResend(message) 
+                  : undefined
               }
             />
           ))
