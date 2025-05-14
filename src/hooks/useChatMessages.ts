@@ -15,12 +15,18 @@ export const useChatMessages = (currentUser: User, selectedUser: User) => {
   // Handle incoming messages from real-time subscription
   const handleMessageReceived = (newMessage: Message) => {
     setMessages(prevMessages => {
-      // Check if this message already exists (might be an optimistic update)
-      const existingMessage = prevMessages.find(m => m.id === newMessage.id);
-      if (existingMessage) {
-        // Update the existing message with server data and mark as sent
+      // Check if this message is an update to a temporary message we sent (optimistic update)
+      const tempMessage = prevMessages.find(m => 
+        m.status === "sending" && 
+        m.sender_id === newMessage.sender_id && 
+        m.recipient_id === newMessage.recipient_id &&
+        m.content === newMessage.content
+      );
+      
+      if (tempMessage) {
+        // Update the temporary message with server data and mark as sent
         return prevMessages.map(m => 
-          m.id === newMessage.id 
+          m.id === tempMessage.id 
             ? { ...newMessage, status: "sent" as const } 
             : m
         );

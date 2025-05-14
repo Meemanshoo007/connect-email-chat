@@ -36,18 +36,27 @@ export const useMessageActions = (
       console.log("Sending message:", newMsg);
 
       // Send to server, excluding the temporary id and status
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('chat_messages')
         .insert([{
           sender_id: newMsg.sender_id,
           recipient_id: newMsg.recipient_id,
           content: newMsg.content,
-        }]);
+        }])
+        .select();
 
       if (error) throw error;
       
-      // Message sent successfully
-      // The real-time subscription will update the message with the real ID
+      if (data && data[0]) {
+        // Update the message with the real ID from the server and mark as sent
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            msg.id === tempId 
+              ? { ...data[0], status: "sent" as const } 
+              : msg
+          )
+        );
+      }
     } catch (error: any) {
       console.error("Error sending message:", error.message);
       
@@ -89,15 +98,27 @@ export const useMessageActions = (
     
     try {
       // Send to server
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('chat_messages')
         .insert([{
           sender_id: newMsg.sender_id,
           recipient_id: newMsg.recipient_id,
           content: newMsg.content,
-        }]);
+        }])
+        .select();
 
       if (error) throw error;
+      
+      if (data && data[0]) {
+        // Update the message with the real ID from the server and mark as sent
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            msg.id === newMsg.id 
+              ? { ...data[0], status: "sent" as const } 
+              : msg
+          )
+        );
+      }
     } catch (error: any) {
       console.error("Error resending message:", error.message);
       
