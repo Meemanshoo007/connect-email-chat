@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Message } from "@/components/ChatMessage";
 import { User } from "@/context/AuthContext";
@@ -15,6 +16,10 @@ export const useChatMessages = (currentUser: User, selectedUser: User) => {
   // Handle incoming messages from real-time subscription
   const handleMessageReceived = (newMessage: Message) => {
     setMessages(prevMessages => {
+      // Check if message already exists in the list (to avoid duplicates)
+      const exists = prevMessages.some(m => m.id === newMessage.id);
+      if (exists) return prevMessages;
+      
       // Check if this message is an update to a temporary message we sent (optimistic update)
       const tempMessage = prevMessages.find(m => 
         m.status === "sending" && 
